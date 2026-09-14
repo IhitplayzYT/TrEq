@@ -21,6 +21,7 @@ use crate::models::models::EqProfile;
         }
 
         pub fn load_all_confs(&mut self){
+            self.all_confs.clear();
             fs::read_dir(&self.ip_dir).unwrap().for_each(|x|{
                 let f = x.unwrap();
                 if f.file_type().unwrap().is_file() {

@@ -9,12 +9,12 @@ use crate::Dao::dao::Dao;
 
     #[derive(Debug,Serialize,Deserialize)]
     pub struct EqProfile{
-        id: Uuid,
-        nodes: HashMap<Uuid,Arc<Mutex<EqNode>>>,
-        name: String,
-        preamp: Option<f32>,
-        root: Option<Arc<Mutex<EqNode>>>,
-        channel: u8
+        pub id: Uuid,
+        pub nodes: HashMap<Uuid,Arc<Mutex<EqNode>>>,
+        pub name: String,
+        pub preamp: Option<f32>,
+        pub root: Option<Arc<Mutex<EqNode>>>,
+        pub channel: u8
     }
 
     impl EqProfile{
@@ -436,12 +436,30 @@ use crate::Dao::dao::Dao;
         pub dirty: bool,
         pub cur_buff: String,
         pub is_buff_dirty: bool,
-        pub dao: Dao
+        pub dao: Dao,
+        pub current_interface: SelectInterfaces,
+        pub selected_profile_idx: usize,
+        pub selected_node_idx: usize,
+        pub selected_band_idx: usize,
+        pub selected_filter_idx: usize,
+        pub message: Option<String>,
     }
 
     impl App{
         pub fn new(dir: String) -> Self{
-            Self { profiles: vec![], dirty: false, cur_buff:String::new(), is_buff_dirty: false, dao: Dao::new(dir)}
+            Self { 
+                profiles: vec![], 
+                dirty: false, 
+                cur_buff:String::new(), 
+                is_buff_dirty: false, 
+                dao: Dao::new(dir),
+                current_interface: SelectInterfaces::default(),
+                selected_profile_idx: 0,
+                selected_node_idx: 0,
+                selected_band_idx: 0,
+                selected_filter_idx: 0,
+                message: None,
+            }
         }
 
         pub fn is_loaded(&self,name: &str) -> bool{
@@ -463,10 +481,13 @@ use crate::Dao::dao::Dao;
         DeleteEqBand,
         SelectEqBand,
         UpdateEqBand,
+        SelectFilter,
+        ViewEqCurve,
         DeleteProfile,
         SelectProfile,
         SearchProfile,
         UpdateProfile,
+        AllProfiles,
         SaveProfile,
         SaveProfiles,
         Finalize,
@@ -482,7 +503,7 @@ use crate::Dao::dao::Dao;
    }
 
    impl SelectInterfaces{
-        pub const ALL: [SelectInterfaces;18] = [SelectInterfaces::AddProfile,SelectInterfaces::AddNode,SelectInterfaces::DeleteNode,SelectInterfaces::SelectNode,SelectInterfaces::UpdateNode,SelectInterfaces::AddEqBand,SelectInterfaces::DeleteEqBand,SelectInterfaces::SelectEqBand,SelectInterfaces::UpdateEqBand,SelectInterfaces::DeleteProfile,SelectInterfaces::SelectProfile,SelectInterfaces::SearchProfile,SelectInterfaces::UpdateProfile,SelectInterfaces::SaveProfile,SelectInterfaces::SaveProfiles,SelectInterfaces::Finalize,SelectInterfaces::Load,SelectInterfaces::Unload];
+        pub const ALL: [SelectInterfaces;21] = [SelectInterfaces::AddProfile,SelectInterfaces::AddNode,SelectInterfaces::DeleteNode,SelectInterfaces::SelectNode,SelectInterfaces::UpdateNode,SelectInterfaces::AddEqBand,SelectInterfaces::DeleteEqBand,SelectInterfaces::SelectEqBand,SelectInterfaces::UpdateEqBand,SelectInterfaces::SelectFilter,SelectInterfaces::ViewEqCurve,SelectInterfaces::DeleteProfile,SelectInterfaces::SelectProfile,SelectInterfaces::SearchProfile,SelectInterfaces::UpdateProfile,SelectInterfaces::AllProfiles,SelectInterfaces::SaveProfile,SelectInterfaces::SaveProfiles,SelectInterfaces::Finalize,SelectInterfaces::Load,SelectInterfaces::Unload];
 
         pub fn name(&self) -> &'static str{
             match self{
@@ -495,6 +516,8 @@ use crate::Dao::dao::Dao;
                 SelectInterfaces::DeleteEqBand => {"DeleteEqBand"},
                 SelectInterfaces::SelectEqBand => {"SelectEqBand"},
                 SelectInterfaces::UpdateEqBand => {"UpdateEqBand"},
+                SelectInterfaces::SelectFilter => {"SelectFilter"},
+                SelectInterfaces::ViewEqCurve => {"ViewEqCurve"},
                 SelectInterfaces::DeleteProfile => {"DeleteProfile"},
                 SelectInterfaces::SelectProfile => {"SelectProfile"},
                 SelectInterfaces::SearchProfile => {"SearchProfile"},
@@ -504,6 +527,7 @@ use crate::Dao::dao::Dao;
                 SelectInterfaces::Finalize => {"Finalize"},
                 SelectInterfaces::Load => {"Load"},
                 SelectInterfaces::Unload => {"Unload"},
+                SelectInterfaces::AllProfiles => {"AllProfiles"},
             }
 
         }
