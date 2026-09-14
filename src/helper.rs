@@ -13,6 +13,7 @@ pub mod Helper{
         pub dbg: bool,
         pub profile: Option<String>,
         pub output_profiles_path: String,
+        pub stereo: bool
     }
 
 
@@ -24,7 +25,7 @@ pub mod Helper{
 
     impl CLI{
         pub fn new() -> Self{
-            Self {dbg: false,profile: None,output_profiles_path: ".Eqfiles/".to_string()}
+            Self {dbg: false,profile: None,output_profiles_path: ".Eqfiles/".to_string(),stereo:true}
         }
 
         pub fn Parse_Args(&mut self){
@@ -38,6 +39,10 @@ pub mod Helper{
                     self.profile = Some(i[i.find("=").unwrap()+1..].to_string());
                 } else if i.starts_with("--db_path=") || i.starts_with("-db="){
                     self.output_profiles_path = i[i.find("=").unwrap()+1..].to_string();
+                } else if matches!(&i[..],"--stereo"|"-s"){
+                   self.stereo = true;
+                } else if matches!(&i[..],"--mono"|"-m"){
+                   self.stereo = false;
                 } else{
                     Help();
                 }

@@ -1,53 +1,56 @@
 pub mod models{
-    use std::{cell::RefCell, collections::HashMap, f32, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, f32, rc::Rc, sync::{Arc, Mutex}};
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::Dao::dao::Dao;
+
+
     #[derive(Debug,Serialize,Deserialize)]
     pub struct EqProfile{
         id: Uuid,
-        nodes: HashMap<Uuid,Rc<RefCell<EqNode>>>,
+        nodes: HashMap<Uuid,Arc<Mutex<EqNode>>>,
         name: String,
         preamp: Option<f32>,
-        root: Option<Rc<RefCell<EqNode>>>
+        root: Option<Arc<Mutex<EqNode>>>,
+        channel: u8
     }
 
     impl EqProfile{
-        pub fn new(name: &str,preamp: Option<f32>) -> Self{
-            Self { id: Uuid::new_v4(), name: name.to_string(), preamp, root: None,nodes: HashMap::new()}
+        pub fn new(name: &str,preamp: Option<f32>,channel: u8) -> Self{
+            Self { id: Uuid::new_v4(), name: name.to_string(), preamp, root: None,nodes: HashMap::new(),channel}
         }
 
         pub fn add_node(&mut self,parent: Option<Uuid>,node: EqNode){
             let id = node.id.clone();
-            let node_rc = Rc::new(RefCell::new(node));
+            let node_rc = Arc::new(Mutex::new(node));
             
             if let Some(paren) = parent{
                 if let Some(nd) = self.nodes.get(&paren){
-                    nd.borrow_mut().children.push(node_rc.clone());
+                    nd.lock().unwrap().children.push(Arc::clone(&node_rc));
                 }
             } else {
-                self.root = Some(node_rc.clone());
-            }
-            
+                self.root = Some(Arc::clone(&node_rc));
+            }            
             self.nodes.insert(id, node_rc);
         }
 
         pub fn deactive_node(&mut self,id: Uuid){
             if let Some(x) = self.nodes.get(&id){
-                x.borrow_mut().enabled = false;
+                x.lock().unwrap().enabled = false;
             }
         }
 
         pub fn activate_node(&mut self,id: Uuid){
             if let Some(x) = self.nodes.get(&id){
-                x.borrow_mut().enabled = true;
+                x.lock().unwrap().enabled = true;
             }
         }
 
         pub fn cleanup(&mut self){
             if let Some(z) = &self.root{
-                z.borrow_mut()._inorder(&mut self.nodes,None);
+                z.lock().unwrap()._inorder(&mut self.nodes,None);
             }   
         }
 
@@ -60,14 +63,14 @@ use uuid::Uuid;
                 use BandOp::*;
                 match bnd_op{
                     UpdateBand(bnd_id) => {
-                        if let Some(bnd_idx) = nd.borrow().band_map.get(&bnd_id){
+                        if let Some(bnd_idx) = nd.lock().unwrap().band_map.get(&bnd_id){
                             use BandUpdate::*;
                             if let Some(op) = o_op{ 
                                 match op{
-                                    UpdateFilter(fi) => {nd.borrow_mut().bands[*bnd_idx].update_filter(fi);},
-                                    UpdateGain(ga) => {nd.borrow_mut().bands[*bnd_idx].update_gain(ga);},
-                                    UpdateFreq(fr) => {nd.borrow_mut().bands[*bnd_idx].update_freq(fr);},
-                                    UpdateQ(q) => {nd.borrow_mut().bands[*bnd_idx].update_q(q);},
+                                    UpdateFilter(fi) => {nd.lock().unwrap().bands[*bnd_idx].update_filter(fi);},
+                                    UpdateGain(ga) => {nd.lock().unwrap().bands[*bnd_idx].update_gain(ga);},
+                                    UpdateFreq(fr) => {nd.lock().unwrap().bands[*bnd_idx].update_freq(fr);},
+                                    UpdateQ(q) => {nd.lock().unwrap().bands[*bnd_idx].update_q(q);},
                                     _ => {}
                                 }
                             }
@@ -77,24 +80,24 @@ use uuid::Uuid;
                         if let Some(op) = o_op{
                             use BandUpdate::*;
                             match op{
-                                Create(fi,ga,fr,sr,q) => {nd.borrow_mut().add_band(fr,fi, Some(ga),sr,q);},
+                                Create(fi,ga,fr,sr,q) => {nd.lock().unwrap().add_band(fr,fi, Some(ga),sr,q);},
                                 _ => {}
                             }
                         }
                                
                     },
                     DeleteBand(bnd_id) => {
-                        nd.borrow_mut().disable_band(bnd_id);
+                        nd.lock().unwrap().disable_band(bnd_id);
                     },
                 }
             }
         }
 
-        pub fn get_node(&self, id: Uuid) -> Option<Rc<RefCell<EqNode>>> {
+        pub fn get_node(&self, id: Uuid) -> Option<Arc<Mutex<EqNode>>> {
             self.nodes.get(&id).cloned()
         }
 
-        pub fn get_root(&self) -> Option<Rc<RefCell<EqNode>>> {
+        pub fn get_root(&self) -> Option<Arc<Mutex<EqNode>>> {
             self.root.clone()
         }
 
@@ -155,9 +158,11 @@ use uuid::Uuid;
         pub name: Option<String>,
         pub enabled: bool,
         pub bands: Vec<EqBand>,
-        pub children: Vec<Rc<RefCell<EqNode>>>,
+        pub children: Vec<Arc<Mutex<EqNode>>>,
         pub band_map: HashMap<Uuid,usize>
     }
+
+    
 
     impl EqNode{
         pub fn new(name: Option<String>) -> Self{
@@ -171,12 +176,12 @@ use uuid::Uuid;
             self.band_map.insert(id, self.bands.len()-1);
         }
         
-        fn _inorder(&mut self,map: &mut HashMap<Uuid,Rc<RefCell<EqNode>>>,parent: Option<&mut EqNode>){  
+        fn _inorder(&mut self,map: &mut HashMap<Uuid,Arc<Mutex<EqNode>>>,parent: Option<&mut EqNode>){  
             if !self.enabled{
                 let children = std::mem::take(&mut self.children);
                 for i in children{
-                    map.remove(&i.borrow().id);
-                    i.borrow_mut()._inorder(map,Some(self));
+                    map.remove(&i.lock().unwrap().id);
+                    i.lock().unwrap()._inorder(map,Some(self));
                 }
                 self.children.clear();
                 self.band_map.clear();
@@ -189,7 +194,7 @@ use uuid::Uuid;
 
         fn _delete_child(&mut self,id: &Uuid){
             for (idx,v) in self.children.iter().enumerate(){
-                if &v.borrow().id == id{
+                if &v.lock().unwrap().id == id{
                     self.children.remove(idx);
                     break;
                 }
@@ -274,21 +279,21 @@ use uuid::Uuid;
             self.children.len()
         }
 
-        pub fn get_child(&self, id: Uuid) -> Option<Rc<RefCell<EqNode>>> {
+        pub fn get_child(&self, id: Uuid) -> Option<Arc<Mutex<EqNode>>> {
             for child in &self.children {
-                if child.borrow().id == id {
+                if child.lock().unwrap().id == id {
                     return Some(child.clone());
                 }
             }
             None
         }
 
-        pub fn add_child(&mut self, child: Rc<RefCell<EqNode>>) {
+        pub fn add_child(&mut self, child: Arc<Mutex<EqNode>>) {
             self.children.push(child);
         }
 
         pub fn remove_child(&mut self, id: Uuid) -> bool {
-            if let Some(idx) = self.children.iter().position(|c| c.borrow().id == id) {
+            if let Some(idx) = self.children.iter().position(|c| c.lock().unwrap().id == id) {
                 self.children.remove(idx);
                 return true;
             }
@@ -424,6 +429,96 @@ use uuid::Uuid;
     Point(usize),
     Range(usize,usize)
    } 
+
+
+    pub struct App{
+        pub profiles: Vec<EqProfile>,
+        pub dirty: bool,
+        pub cur_buff: String,
+        pub is_buff_dirty: bool,
+        pub dao: Dao
+    }
+
+    impl App{
+        pub fn new(dir: String) -> Self{
+            Self { profiles: vec![], dirty: false, cur_buff:String::new(), is_buff_dirty: false, dao: Dao::new(dir)}
+        }
+
+        pub fn is_loaded(&self,name: &str) -> bool{
+            self.profiles.iter().any(|x| &x.name[..] == name)
+        }
+
+
+   }
+
+
+   #[derive(Debug,Clone, Copy,PartialEq, Eq)]
+   pub enum SelectInterfaces{
+        AddProfile,
+        AddNode,
+        DeleteNode,
+        SelectNode,
+        UpdateNode,
+        AddEqBand,
+        DeleteEqBand,
+        SelectEqBand,
+        UpdateEqBand,
+        DeleteProfile,
+        SelectProfile,
+        SearchProfile,
+        UpdateProfile,
+        SaveProfile,
+        SaveProfiles,
+        Finalize,
+        Load,
+        Unload
+   }
+
+   impl Default for SelectInterfaces{
+        fn default() -> Self {
+            SelectInterfaces::AddProfile
+        }
+
+   }
+
+   impl SelectInterfaces{
+        pub const ALL: [SelectInterfaces;18] = [SelectInterfaces::AddProfile,SelectInterfaces::AddNode,SelectInterfaces::DeleteNode,SelectInterfaces::SelectNode,SelectInterfaces::UpdateNode,SelectInterfaces::AddEqBand,SelectInterfaces::DeleteEqBand,SelectInterfaces::SelectEqBand,SelectInterfaces::UpdateEqBand,SelectInterfaces::DeleteProfile,SelectInterfaces::SelectProfile,SelectInterfaces::SearchProfile,SelectInterfaces::UpdateProfile,SelectInterfaces::SaveProfile,SelectInterfaces::SaveProfiles,SelectInterfaces::Finalize,SelectInterfaces::Load,SelectInterfaces::Unload];
+
+        pub fn name(&self) -> &'static str{
+            match self{
+                SelectInterfaces::AddProfile => {"AddProfile"},
+                SelectInterfaces::AddNode => {"AddNode"},
+                SelectInterfaces::DeleteNode => {"DeleteNode"},
+                SelectInterfaces::SelectNode => {"SelectNode"},
+                SelectInterfaces::UpdateNode => {"UpdateNode"},
+                SelectInterfaces::AddEqBand => {"AddEqBand"},
+                SelectInterfaces::DeleteEqBand => {"DeleteEqBand"},
+                SelectInterfaces::SelectEqBand => {"SelectEqBand"},
+                SelectInterfaces::UpdateEqBand => {"UpdateEqBand"},
+                SelectInterfaces::DeleteProfile => {"DeleteProfile"},
+                SelectInterfaces::SelectProfile => {"SelectProfile"},
+                SelectInterfaces::SearchProfile => {"SearchProfile"},
+                SelectInterfaces::UpdateProfile => {"UpdateProfile"},
+                SelectInterfaces::SaveProfile => {"SaveProfile"},
+                SelectInterfaces::SaveProfiles => {"SaveProfiles"},
+                SelectInterfaces::Finalize => {"Finalize"},
+                SelectInterfaces::Load => {"Load"},
+                SelectInterfaces::Unload => {"Unload"},
+            }
+
+        }
+
+        pub fn next(&self) -> SelectInterfaces{
+            let idx = Self::ALL.iter().position(|x| x == self).unwrap();
+            Self::ALL[(idx+1) % Self::ALL.len()]
+        }
+
+        pub fn prev(&self) -> SelectInterfaces{
+            let idx = Self::ALL.iter().position(|x| x == self).unwrap();
+            Self::ALL[(idx+Self::ALL.len()-1) % Self::ALL.len()]
+        }
+
+   }
 
 
 
